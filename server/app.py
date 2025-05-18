@@ -21,10 +21,13 @@ def run_code():
     print(f"🔡 언어: {lang}")
     print(f"🔡 코드 샘플: {repr(code[:30])}")
 
-    # 고정 경로 기반 저장 디렉토리
-    base_dir = '/Users/otter/project-root/server/code'
-
+    # 프로젝트 루트 (DebugVisual_Spike/)
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+    # server/code 경로 설정
+    base_dir = os.path.join(project_root, 'server', 'code')
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
 
     file_map = {
         'c': (
@@ -46,7 +49,7 @@ def run_code():
 
     filename, image, entrypoint_host_path = file_map.get(
         lang,
-        ('main.c', 'c-compiler', os.path.join(project_root, 'docker/c/entrypoint.sh'))  # 기본값도 3개로
+        ('main.c', 'c-compiler', os.path.join(project_root, 'docker/c/entrypoint.sh'))  # 기본값
     )
 
     code_path = os.path.join(base_dir, filename)
@@ -65,10 +68,8 @@ def run_code():
         print(f"❌ 파일 저장 중 오류: {e}")
         return f'파일 저장 실패: {e}', 500
 
-    # 🧠 entrypoint.sh 경로 결정
-    entrypoint_host = f'/Users/otter/project-root/docker/{lang}/entrypoint.sh'
-    if not os.path.exists(entrypoint_host):
-        return f'❌ entrypoint.sh 없음: {entrypoint_host}', 500
+    if not os.path.exists(entrypoint_host_path):
+        return f'❌ entrypoint.sh 없음: {entrypoint_host_path}', 500
 
     try:
         docker_cmd = [
@@ -94,7 +95,6 @@ def run_code():
         print("🔁 반환 코드:", result.returncode)
 
         return result.stdout, 200 if result.returncode == 0 else 400
-
 
     except subprocess.TimeoutExpired:
         return '⏰ 실행 시간이 초과되었습니다.', 408

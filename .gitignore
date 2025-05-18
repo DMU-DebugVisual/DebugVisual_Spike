@@ -1,0 +1,3 @@
+# 컴파일러 임시 파일들
+server/code/*
+!server/code/.gitkeep
