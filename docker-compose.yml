@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - flask
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/debugdb
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: hmjeoung33
+
+  flask:
+    build:
+      context: ./flask  # Flask Dockerfile 위치
+    container_name: python-compiler
+    ports:
+      - "5050:5050"
+
+  db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
