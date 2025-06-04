@@ -49,10 +49,11 @@ def run_code():
 
     code = data.get('code', '')
     input_data = data.get('input', '')
-    lang = data.get('lang', 'c')
+    lang = data.get('lang', '')
     print(f"🔠 언어: {lang}, 코드 일부: {repr(code[:30])}", flush=True)
 
     base_dir = '/home/ec2-user/DebugVisual_Spike/server/code'
+    flask_dir = '/usr/src/app/code'
     os.makedirs(base_dir, exist_ok=True)
 
     file_map = {
@@ -65,21 +66,47 @@ def run_code():
         return jsonify({"error": f"❌ 지원하지 않는 언어입니다: {lang}"}), 400
 
     filename, image = file_map[lang]
-    code_path = os.path.join(base_dir, filename)
-    input_path = os.path.join(base_dir, 'input.txt')
+    code_path = os.path.join(flask_dir, filename)
+    input_path = os.path.join(flask_dir, 'input.txt')
 
     try:
         with open(code_path, 'w') as f:
             f.write(code)
+        print(f"✅ main.py 저장됨: {os.path.exists(code_path)}")
+
+        with open(code_path, 'r') as f:
+            print("📜 main.py 저장된 내용:")
+            print(f.read())
+
         with open(input_path, 'w') as f:
             f.write(input_data)
+        print(f"✅ input.txt 저장됨: {os.path.exists(input_path)}")
         print("✅ 코드 & 입력 파일 저장 성공", flush=True)
 
-        docker_cmd = [
-            'docker', 'run', '--rm',
-            '-v', f'{base_dir}:/usr/src/app',
-            image
-        ]
+        print(image)
+
+        if lang == 'python':
+            docker_cmd = [
+                'docker', 'run', '--rm',
+                '-v', f'{base_dir}:/code',
+                '-w', '/code', image,
+                'python', filename
+            ]
+        elif lang == 'java':
+            docker_cmd = [
+                'docker', 'run', '--rm',
+                '-v', f'{base_dir}:/code',
+                '-w', '/code', image,
+                'sh', '-c', 'javac Main.java && java Main'
+            ]
+        elif lang == 'c':
+            docker_cmd = [
+                'docker', 'run', '--rm',
+                '-v', f'{base_dir}:/code',
+                '-w', '/code', image,
+                'sh', '-c', 'gcc main.c -o program && ./program'
+            ]
+
         print("🐳 Docker 실행 명령어:", ' '.join(docker_cmd), flush=True)
 
         print("📦 Docker 실행 직전", flush=True)
