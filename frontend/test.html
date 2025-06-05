@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>코드 실행 시각화 (d3.js 애니메이션 + BST)</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  body { font-family: sans-serif; background: #f5f5f5; padding: 20px; }
+  textarea { width: 100%; height: 200px; margin-bottom: 10px; }
+  button { margin: 5px; padding: 8px 12px; }
+  #output { margin-top: 20px; }
+  .array-bar { display: inline-block; width: 30px; height: 30px; margin: 2px; background: steelblue; color: white; text-align: center; line-height: 30px; }
+  #linked-list div, #bst-view svg { margin: 2px; }
+</style>
+</head>
+<body>
+
+<h1>코드 실행 시각화 (d3.js 애니메이션 + BST)</h1>
+<textarea id="jsonInput" placeholder="AI가 반환한 JSON을 여기에 붙여넣으세요"></textarea>
+<br>
+<button onclick="init()">시각화 시작</button>
+<button onclick="nextStep()">다음 단계</button>
+
+<div id="step-desc"></div>
+<div id="array-view"></div>
+<div id="linked-list"></div>
+<div id="bst-view"></div>
+<div id="variables"></div>
+
+<script>
+let data, steps, currentStep = 0;
+let variablesMap = {};
+
+// 초기화
+function init() {
+  const input = document.getElementById('jsonInput').value;
+  try {
+    data = JSON.parse(input);
+    steps = data.steps;
+    currentStep = 0;
+
+    data.variables.forEach(v => {
+      variablesMap[v.name] = v.initialValue;
+    });
+
+    renderArray();
+    renderLinkedList([]);
+    renderBST([]);
+    updateVariablesView();
+    showStep();
+  } catch (e) {
+    alert('JSON 파싱 오류: ' + e);
+  }
+}
+
+// 배열 시각화
+function renderArray() {
+  const arrayVar = data.variables.find(v => v.type === 'array');
+  if (!arrayVar) return;
+  const arrayData = variablesMap[arrayVar.name];
+  const bars = d3.select('#array-view').selectAll('div').data(arrayData, (d, i) => i);
+  bars.join('div')
+    .attr('class', 'array-bar')
+    .text(d => d);
+}
+
+// 연결리스트 시각화
+function renderLinkedList(nodes) {
+  const container = d3.select('#linked-list');
+  container.html('<h3>연결리스트</h3>');
+
+  if (!nodes || nodes.length === 0) {
+    container.append('div').text('비어있음');
+    return;
+  }
+
+  const list = container.append('div').style('display', 'flex').style('align-items', 'center');
+  nodes.forEach((node, idx) => {
+    list.append('div')
+      .style('padding', '4px 8px')
+      .style('margin', '0 2px')
+      .style('background', 'purple')
+      .style('color', '#fff')
+      .style('border-radius', '4px')
+      .text(node.value);
+
+    if (idx < nodes.length - 1) {
+      list.append('span').text('→');
+    }
+  });
+}
+
+// BST 시각화
+function renderBST(nodes) {
+  const container = d3.select('#bst-view');
+  container.html('<h3>이진탐색트리</h3>');
+
+  if (!nodes || nodes.length === 0) {
+    container.append('div').text('비어있음');
+    return;
+  }
+
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = { ...n, children: [] }; });
+  nodes.forEach(n => {
+    n.links.forEach(childId => {
+      if (nodeMap[childId]) {
+        nodeMap[n.id].children.push(nodeMap[childId]);
+      }
+    });
+  });
+  const root = nodeMap[nodes[0].id];
+
+  const width = 400, height = 200;
+  const svg = container.append('svg').attr('width', width).attr('height', height);
+  const tree = d3.tree().size([width - 40, height - 40]);
+  const rootNode = d3.hierarchy(root, d => d.children);
+  const treeData = tree(rootNode);
+
+  const g = svg.append('g').attr('transform', 'translate(20,20)');
+
+  g.selectAll('.link')
+    .data(treeData.links())
+    .join('line')
+    .attr('stroke', '#555')
+    .attr('x1', d => d.source.x)
+    .attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x)
+    .attr('y2', d => d.target.y);
+
+  const node = g.selectAll('.node')
+    .data(treeData.descendants())
+    .join('g')
+    .attr('transform', d => `translate(${d.x},${d.y})`);
+
+  node.append('circle').attr('r', 12).attr('fill', 'orange');
+  node.append('text').attr('dy', 4).attr('text-anchor', 'middle').text(d => d.data.value);
+}
+
+// 단계 처리
+function showStep() {
+  if (!steps || currentStep >= steps.length) {
+    alert('마지막 단계입니다.');
+    return;
+  }
+
+  const step = steps[currentStep];
+  d3.select('#step-desc').text('Step ' + (currentStep + 1) + ': ' + step.description);
+
+  if (step.dataStructure) {
+    if (step.dataStructure.type === 'linkedList') {
+      renderLinkedList(step.dataStructure.nodes);
+    } else if (step.dataStructure.type === 'bst') {
+      renderBST(step.dataStructure.nodes);
+    }
+  }
+
+  if (step.changes && step.changes.length) {
+    step.changes.forEach(change => {
+      const { variable, before, after } = change;
+      variablesMap[variable] = after;
+      const arrayVar = data.variables.find(v => v.type === 'array' && v.name === variable);
+      if (arrayVar) {
+        d3.select('#array-view').selectAll('div')
+          .data(after, (d, i) => i)
+          .join('div')
+          .attr('class', 'array-bar')
+          .style('background', 'tomato')
+          .text(d => d)
+          .transition()
+          .duration(500)
+          .style('background', 'steelblue')
+          .text(d => d);
+      } else {
+        updateVariablesView();
+      }
+    });
+  }
+
+  updateVariablesView();
+  currentStep++;
+}
+
+// 변수 상태 표시
+function updateVariablesView() {
+  let varsHTML = '<h3>변수 상태</h3>';
+  Object.entries(variablesMap).forEach(([name, value]) => {
+    varsHTML += name + ': ' + JSON.stringify(value) + '<br>';
+  });
+  document.getElementById('variables').innerHTML = varsHTML;
+}
+
+function nextStep() {
+  showStep();
+}
+</script>
+
+</body>
+</html>
