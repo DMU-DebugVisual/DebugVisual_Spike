@@ -2,19 +2,19 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<title>코드 실행 시각화 (d3.js 애니메이션 + Heap/BST/LinkedList)</title>
+<title>코드 실행 시각화 (d3.js 애니메이션 + Heap/BST/LinkedList/Graph)</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   body { font-family: sans-serif; background: #f5f5f5; padding: 20px; }
   textarea { width: 100%; height: 200px; margin-bottom: 10px; }
   button { margin: 5px; padding: 8px 12px; }
   .array-bar { display: inline-block; width: 30px; height: 30px; margin: 2px; background: steelblue; color: white; text-align: center; line-height: 30px; }
-  #linked-list div, #bst-view svg, #heap-view svg { margin: 2px; }
+  #linked-list div, #bst-view svg, #heap-view svg, #graph-view svg { margin: 2px; }
 </style>
 </head>
 <body>
 
-<h1>코드 실행 시각화 (d3.js 애니메이션 + Heap/BST/LinkedList)</h1>
+<h1>코드 실행 시각화 (d3.js 애니메이션 + Heap/BST/LinkedList/Graph)</h1>
 <textarea id="jsonInput" placeholder="AI가 반환한 JSON을 여기에 붙여넣으세요"></textarea>
 <br>
 <button onclick="init()">시각화 시작</button>
@@ -25,6 +25,7 @@
 <div id="linked-list"></div>
 <div id="bst-view"></div>
 <div id="heap-view"></div>
+<div id="graph-view"></div>
 <div id="variables"></div>
 
 <script>
@@ -44,6 +45,7 @@ function init() {
     renderLinkedList([]);
     renderBST([]);
     renderHeap([]);
+    renderGraph([], []); // 초기화 안전 처리
     updateVariablesView();
     showStep();
   } catch (e) {
@@ -51,7 +53,6 @@ function init() {
   }
 }
 
-// 배열 시각화
 function renderArray() {
   const arrayVar = data.variables.find(v => v.type === 'array');
   if (!arrayVar) return;
@@ -60,7 +61,6 @@ function renderArray() {
   bars.join('div').attr('class', 'array-bar').text(d => d);
 }
 
-// 연결리스트 시각화
 function renderLinkedList(nodes) {
   const container = d3.select('#linked-list');
   container.html('<h3>연결리스트</h3>');
@@ -78,7 +78,6 @@ function renderLinkedList(nodes) {
   });
 }
 
-// BST 시각화
 function renderBST(nodes) {
   const container = d3.select('#bst-view');
   container.html('<h3>이진탐색트리</h3>');
@@ -110,7 +109,6 @@ function renderBST(nodes) {
   node.append('text').attr('dy', 4).attr('text-anchor', 'middle').text(d => d.data.value);
 }
 
-// Heap 시각화
 function renderHeap(nodes) {
   const container = d3.select('#heap-view');
   container.html('<h3>힙</h3>');
@@ -142,6 +140,55 @@ function renderHeap(nodes) {
   node.append('text').attr('dy', 4).attr('text-anchor', 'middle').text(d => d.data.value);
 }
 
+function renderGraph(nodes, edges = []) {
+  const container = d3.select('#graph-view');
+  container.html('<h3>그래프</h3>');
+  if (!nodes || nodes.length === 0) {
+    container.append('div').text('비어있음');
+    return;
+  }
+
+  // 노드와 엣지 데이터를 객체 형태로 변환
+  const nodeData = nodes.map(id => ({ id }));
+  const edgeData = edges.map(e => ({ source: e[0], target: e[1] }));
+
+  const width = 400, height = 300;
+  const svg = container.append('svg').attr('width', width).attr('height', height);
+
+  const simulation = d3.forceSimulation(nodeData)
+    .force('link', d3.forceLink(edgeData).distance(80).id(d => d.id))
+    .force('charge', d3.forceManyBody().strength(-150))  // 적절히 조정
+    .force('center', d3.forceCenter(width / 2, height / 2));
+
+  const link = svg.selectAll('.link')
+    .data(edgeData)
+    .join('line')
+    .attr('stroke', '#999')
+    .attr('stroke-width', 2);
+
+  const node = svg.selectAll('.node')
+    .data(nodeData)
+    .join('circle')
+    .attr('r', 15)
+    .attr('fill', 'blue');
+
+  const label = svg.selectAll('.label')
+    .data(nodeData)
+    .join('text')
+    .text(d => d.id)
+    .attr('text-anchor', 'middle')
+    .attr('dy', 4)
+    .attr('fill', 'white');
+
+  simulation.on('tick', () => {
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('cx', d => d.x).attr('cy', d => d.y);
+    label.attr('x', d => d.x).attr('y', d => d.y);
+  });
+}
+
+
 function showStep() {
   if (!steps || currentStep >= steps.length) {
     alert('마지막 단계입니다.');
@@ -153,6 +200,10 @@ function showStep() {
     if (step.dataStructure.type === 'linkedList') renderLinkedList(step.dataStructure.nodes);
     else if (step.dataStructure.type === 'bst') renderBST(step.dataStructure.nodes);
     else if (step.dataStructure.type === 'heap') renderHeap(step.dataStructure.nodes);
+    else if (step.dataStructure.type === 'graph') {
+      // edges가 없으면 []로 처리
+      renderGraph(step.dataStructure.nodes, step.dataStructure.edges || []);
+    }
   }
   if (step.changes && step.changes.length) {
     step.changes.forEach(change => {
