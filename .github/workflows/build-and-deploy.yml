@@ -23,8 +23,8 @@ jobs:
       - name: Build & Push spike image (root Dockerfile)
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile      # ← 루트 Dockerfile 사용
+          context: .           # 루트 컨텍스트
+          file: ./Dockerfile   # 루트 Dockerfile 사용
           push: true
           tags: |
             ghcr.io/dmu-debugvisual/debugvisual-spike:latest
