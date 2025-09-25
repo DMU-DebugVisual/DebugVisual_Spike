@@ -1,23 +1,69 @@
+# 서버 루트 파일에 들어가 있는 docker-compose.yml
+# flask-server 컨테이너에 들어가있는 거 X
+
 services:
   backend:
-    build: .
+    build:
+      context: ./Zivorp_Backend
+      dockerfile: Dockerfile
+    container_name: spring-backend
+    working_dir: /app
     ports:
       - "8080:8080"
+    networks:
+      - debug-net
     depends_on:
       - flask
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/debugdb
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: hmjeoung33
 
   flask:
     build:
-      context: ./flask  # Flask Dockerfile 위치
-    container_name: python-compiler
+      context: ./Zivorp_Spike
+      dockerfile: Dockerfile
+    container_name: flask-server
     ports:
       - "5050:5050"
+    volumes:
+      - /home/ec2-user/Zivorp_Spike/server/code:/usr/src/app/code
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - debug-net
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      - PYTHONIOENCODING=utf-8
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+    env_file:
+      - ./Zivorp_Spike/.env
 
-  db:
-    image: mysql:8.0
-    ports:
-      - "3306:3306"
+  python-compiler:
+    build:
+      context: ./Zivorp_Spike/docker/python
+    image: python-compiler
+    container_name: python-compiler
+    entrypoint: [ "echo", "python-compiler image build only" ]
+    networks:
+      - debug-net
+
+  c-compiler:
+    build:
+      context: ./Zivorp_Spike/docker/c
+    image: c-compiler
+    container_name: c-compiler
+    entrypoint: [ "echo", "c-compiler image build only" ]
+    networks:
+      - debug-net
+
+  java-compiler:
+    build:
+      context: ./Zivorp_Spike/docker/java
+    image: java-compiler
+    container_name: java-compiler
+    entrypoint: [ "echo", "java-compiler image build only" ]
+    networks:
+      - debug-net
+
+networks:
+  debug-net:
+    driver: bridge

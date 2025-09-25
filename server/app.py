@@ -57,7 +57,7 @@ def echo():
 
 # 공통 코드 실행 함수
 def execute_code(code, input_data, lang):
-    base_dir = '/home/ec2-user/DebugVisual_Spike/server/code'
+    base_dir = '/home/ec2-user/Zivorp_Spike/server/code'
     flask_dir = '/usr/src/app/code'
     os.makedirs(base_dir, exist_ok=True)
 
