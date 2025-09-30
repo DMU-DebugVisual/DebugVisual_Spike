@@ -2,6 +2,8 @@ import os
 import subprocess
 import httpx
 import sys
+import uuid
+import shutil
 from flask import Flask, request, jsonify
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -55,11 +57,13 @@ def echo():
         print("❌ JSON 파싱 실패:", e)
         return "Invalid JSON", 400
 
-# 공통 코드 실행 함수
+# 공통 코드 실행 함수 (🔧 격리 디렉터리 + 정리 로직 추가)
 def execute_code(code, input_data, lang):
-    base_dir = '/home/ec2-user/Zivorp_Spike/server/code'
-    flask_dir = '/usr/src/app/code'
-    os.makedirs(base_dir, exist_ok=True)
+    # 호스트 경로(왼쪽) ↔ Flask 컨테이너 경로(오른쪽) 바인드:
+    # docker-compose.yml: /home/ec2-user/Zivorp_Spike/server/code:/usr/src/app/code
+    base_dir = '/home/ec2-user/Zivorp_Spike/server/code'  # 호스트에서 마운트되는 경로
+    flask_dir = '/usr/src/app/code'                       # Flask 컨테이너 내부 경로
+    os.makedirs(flask_dir, exist_ok=True)
 
     file_map = {
         'c': ('main.c', 'c-compiler'),
@@ -70,38 +74,39 @@ def execute_code(code, input_data, lang):
     if lang not in file_map:
         return None, f"❌ 지원하지 않는 언어입니다: {lang}"
 
+    # 🔹 요청별 격리 디렉터리 생성
+    job_id = f"job-{uuid.uuid4().hex[:12]}"
+    job_dir_flask = os.path.join(flask_dir, job_id)  # 컨테이너 내부 경로
+    os.makedirs(job_dir_flask, exist_ok=True)
+
     filename, image = file_map[lang]
-    code_path = os.path.join(flask_dir, filename)
-    input_path = os.path.join(flask_dir, 'input.txt')
+    code_path = os.path.join(job_dir_flask, filename)
+    input_path = os.path.join(job_dir_flask, 'input.txt')
 
     with open(code_path, 'w') as f:
-        f.write(code)
+        f.write(code or "")
 
     with open(input_path, 'w') as f:
-        f.write(input_data)
+        f.write(input_data or "")
 
+    # 언어별 실행 커맨드 (작업 디렉터리는 /code/<job_id>)
     if lang == 'python':
-        docker_cmd = [
-            'docker', 'run', '--rm',
-            '-v', f'{base_dir}:/code',
-            '-w', '/code', image,
-            'python', filename
-        ]
+        run_cmd = ['python', filename]
     elif lang == 'java':
-        docker_cmd = [
-            'docker', 'run', '--rm',
-            '-v', f'{base_dir}:/code',
-            '-w', '/code', image,
-            'sh', '-c', 'javac Main.java && java Main'
-        ]
-    elif lang == 'c':
-        docker_cmd = [
-            'docker', 'run', '--rm',
-            '-v', f'{base_dir}:/code',
-            '-w', '/code', image,
-            'sh', '-c', 'gcc main.c -o program && ./program'
-        ]
+        run_cmd = ['sh', '-c', 'javac Main.java && java Main']
+    else:  # 'c'
+        run_cmd = ['sh', '-c', 'gcc main.c -o program && ./program']
 
+    # 🔹 컴파일러 컨테이너에 호스트 base_dir를 /code로 마운트하고
+    #    작업디렉터리를 /code/<job_id>로 지정하여 격리 실행
+    docker_cmd = [
+        'docker', 'run', '--rm',
+        '-v', f'{base_dir}:/code',
+        '-w', f'/code/{job_id}',
+        # (선택 권장 안전옵션)
+        # '--network','none','--cpus','1','-m','256m','--pids-limit','128',
+        image, *run_cmd
+    ]
     print("🐳 Docker 실행 명령어:", ' '.join(docker_cmd))
 
     try:
@@ -112,16 +117,14 @@ def execute_code(code, input_data, lang):
             text=True,
             timeout=10
         )
+        return result, None
     except subprocess.TimeoutExpired:
-        return {
-            "stdout": "",
-            "stderr": "",
-            "exitCode": -1,
-            "success": False,
-            "error": "⏰ 실행 시간이 초과되었습니다."
-        }, None
-
-    return result, None
+        # run_code가 CompletedProcess 형태를 기대하므로 맞춰서 반환
+        timeout_cp = subprocess.CompletedProcess(docker_cmd, returncode=124, stdout='', stderr='⏰ 실행 시간이 초과되었습니다.')
+        return timeout_cp, None
+    finally:
+        # 🔹 실행 후 항상 격리 디렉터리 정리 (호스트에도 반영됨)
+        shutil.rmtree(job_dir_flask, ignore_errors=True)
 
 @app.route('/run', methods=['POST'])
 def run_code():
@@ -165,7 +168,7 @@ def visualize_code():
 
     try:
         data = request.get_json(force=True)
-        print("✅ JSON 파싱 성공:", data, flush=True)
+        print("✅ JSON 수신 성공:", data, flush=True)
     except Exception as e:
         print(f"❌ JSON 파싱 실패: {e}", flush=True)
         return jsonify({"error": "JSON 파싱 오류", "message": str(e)}), 400
@@ -208,7 +211,6 @@ def visualize_code():
         "exitCode": result.returncode,
         "success": result.returncode == 0
     }), 200 if result.returncode == 0 else 400
-
 
 
 if __name__ == '__main__':

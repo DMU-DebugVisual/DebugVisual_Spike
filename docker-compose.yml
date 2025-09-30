@@ -1,6 +1,3 @@
-# 서버 루트 파일에 들어가 있는 docker-compose.yml
-# flask-server 컨테이너에 들어가있는 거 X
-
 services:
   backend:
     build:
@@ -14,6 +11,8 @@ services:
       - debug-net
     depends_on:
       - flask
+    links:                      # ✅ 추가: 백엔드에서 'flask-server'로 접근 가능
+      - flask:flask-server
 
   flask:
     build:
