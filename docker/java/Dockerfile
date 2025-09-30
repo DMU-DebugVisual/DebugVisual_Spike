@@ -1,4 +1,4 @@
-FROM openjdk:17
+FROM openjdk:17-jdk-slim
 WORKDIR /usr/src/app
 
 COPY entrypoint.sh /usr/src/app/entrypoint.sh
